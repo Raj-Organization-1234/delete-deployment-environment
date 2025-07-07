@@ -1,3 +1,3 @@
-import { run } from './execute';
+import { run } from './deployment-manager';
 
 run();
