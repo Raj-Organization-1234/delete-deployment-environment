@@ -6,84 +6,16 @@ import { RequestError } from '@octokit/request-error';
 import nock from 'nock';
 
 const test = anyTest as TestFn<{
-  token: string;
-  ref: string;
+  githubToken: string;
+  branchRef: string;
   octokit: Octokit;
   repo: { owner: string; repo: string };
 }>;
 
-interface Context {
+interface Action {
   owner: string;
   repo: string;
   ref?: string;
-}
-
-async function createEnvironment(
-  octokit: Octokit,
-  environmentName: string,
-  { owner, repo }: Context,
-): Promise<void> {
-  await octokit.request(
-    'PUT /repos/{owner}/{repo}/environments/{environment_name}',
-    {
-      owner,
-      repo,
-      environment_name: environmentName,
-    },
-  );
-}
-
-async function createDeploymentWithStatus(
-  octokit: Octokit,
-  environment: string,
-  { owner, repo, ref = 'main' }: Context,
-): Promise<void> {
-  await octokit.request('POST /repos/{owner}/{repo}/deployments', {
-    owner,
-    repo,
-    ref,
-    environment,
-    required_contexts: [],
-  });
-  const { data } = await octokit.request(
-    'GET /repos/{owner}/{repo}/deployments',
-    {
-      owner,
-      repo,
-      environment,
-    },
-  );
-  const [deployment] = data;
-  const { id } = deployment;
-  await octokit.request(
-    'POST /repos/{owner}/{repo}/deployments/{deployment_id}/statuses',
-    {
-      owner: owner,
-      repo: repo,
-      state: 'success',
-      deployment_id: id,
-    },
-  );
-}
-
-async function getDeployments(
-  octokit: Octokit,
-  environment: string,
-  { owner, repo }: Context,
-): Promise<{ deploymentId: number; ref: string }[]> {
-  const { data } = await octokit.request(
-    'GET /repos/{owner}/{repo}/deployments',
-    {
-      owner,
-      repo,
-      environment,
-    },
-  );
-  const deploymentRefs: { deploymentId: number; ref: string }[] = data.map((deployment) => ({
-    deploymentId: deployment.id,
-    ref: deployment.ref,
-  }));
-  return deploymentRefs;
 }
 
 test.beforeEach((t) => {
@@ -99,8 +31,8 @@ test.beforeEach((t) => {
     auth: GITHUB_TOKEN,
   });
   t.context = {
-    token: GITHUB_TOKEN,
-    ref,
+    githubToken: GITHUB_TOKEN,
+    branchRef: ref,
     octokit,
     repo,
   };
@@ -122,8 +54,8 @@ test.beforeEach((t) => {
 
 test.serial('should successfully remove environment', async (t) => {
   t.timeout(60000);
-  const { octokit, repo, ref } = t.context;
-  const context: Context = repo;
+  const { octokit, repo, branchRef } = t.context;
+  const context: Action = repo;
   const environment = 'test-full-env-removal';
   
   // Mock GitHub API calls for this specific test
@@ -152,8 +84,8 @@ test.serial('should successfully remove environment', async (t) => {
     .reply(404, { message: 'Not Found' });
 
   try {
-    await createEnvironment(octokit, environment, context);
-    await createDeploymentWithStatus(octokit, environment, { ...context, ref });
+    await setupEnvironment(octokit, environment, context);
+    await setupDeploymentWithStatus(octokit, environment, { ...context, ref: branchRef });
   } catch (err) {
     t.log(err);
     t.fail();
@@ -181,8 +113,8 @@ test.serial('should successfully remove environment', async (t) => {
 test.serial(
   'should successfully remove deployments when environment has not been created',
   async (t) => {
-    const { octokit, repo, ref } = t.context;
-    const context: Context = repo;
+    const { octokit, repo, branchRef } = t.context;
+    const context: Action = repo;
     const environment = 'test-remove-without-creating-environment';
     
     // Mock GitHub API calls for this specific test
@@ -209,7 +141,7 @@ test.serial(
       .query(true)
       .reply(200, []);
 
-    await createDeploymentWithStatus(octokit, environment, { ...context, ref });
+    await setupDeploymentWithStatus(octokit, environment, { ...context, ref: branchRef });
     process.env.INPUT_ENVIRONMENT = environment;
     await run();
     let environmentExists = true;
@@ -227,7 +159,7 @@ test.serial(
       environmentExists = (err as RequestError).status === 404 ? false : true;
     }
     t.falsy(environmentExists);
-    const deployments = await getDeployments(octokit, environment, context);
+    const deployments = await getAllDeployments(octokit, environment, context);
     t.is(deployments.length, 0);
   },
 );
@@ -235,8 +167,8 @@ test.serial(
 test.serial(
   'should successfully remove deployments and not remove environment',
   async (t) => {
-    const { octokit, repo, ref } = t.context;
-    const context: Context = repo;
+    const { octokit, repo, branchRef } = t.context;
+    const context: Action = repo;
     const environment = 'test-remove-deployments-only';
     
     // Mock GitHub API calls for this specific test
@@ -274,8 +206,8 @@ test.serial(
       .delete(`/repos/${repo.owner}/${repo.repo}/environments/${environment}`)
       .reply(204);
 
-    await createEnvironment(octokit, environment, context);
-    await createDeploymentWithStatus(octokit, environment, { ...context, ref });
+    await setupEnvironment(octokit, environment, context);
+    await setupDeploymentWithStatus(octokit, environment, { ...context, ref: branchRef });
     process.env.INPUT_ENVIRONMENT = environment;
     process.env.INPUT_ONLYREMOVEDEPLOYMENTS = 'true';
     await run();
@@ -295,7 +227,7 @@ test.serial(
       t.fail();
     }
     t.truthy(environmentExists);
-    const deployments = await getDeployments(octokit, environment, context);
+    const deployments = await getAllDeployments(octokit, environment, context);
     t.is(deployments.length, 0);
     // delete all artifacts
     delete process.env.INPUT_ONLYREMOVEDEPLOYMENTS;
@@ -307,8 +239,8 @@ test.serial(
   'should successfully remove deployment ref only and not remove environment',
   async (t) => {
     const environment = 'test-remove-deployment-ref-only';
-    const { octokit, repo, ref } = t.context;
-    const context: Context = repo;
+    const { octokit, repo, branchRef } = t.context;
+    const context: Action = repo;
     const newRef = 'release/v2';
     
     // Mock GitHub API calls for this specific test
@@ -357,13 +289,13 @@ test.serial(
       .reply(204)
       .persist();
 
-    await createEnvironment(octokit, environment, context);
-    await createDeploymentWithStatus(octokit, environment, {
+    await setupEnvironment(octokit, environment, context);
+    await setupDeploymentWithStatus(octokit, environment, {
       ...context,
-      ref,
+      ref: branchRef,
     });
     // make sure this branch exists to create another deployment
-    await createDeploymentWithStatus(octokit, environment, {
+    await setupDeploymentWithStatus(octokit, environment, {
       ...context,
       ref: newRef,
     });
@@ -383,7 +315,7 @@ test.serial(
         },
       );
       environmentExists = res.status === 200;
-      deployments = await getDeployments(octokit, environment, context);
+      deployments = await getAllDeployments(octokit, environment, context);
     } catch (err) {
       t.log(err);
       t.fail();
@@ -399,3 +331,71 @@ test.serial(
     await run();
   },
 );
+
+async function setupEnvironment(
+  octokit: Octokit,
+  environmentName: string,
+  { owner, repo }: Action,
+): Promise<void> {
+  await octokit.request(
+    'PUT /repos/{owner}/{repo}/environments/{environment_name}',
+    {
+      owner,
+      repo,
+      environment_name: environmentName,
+    },
+  );
+}
+
+async function setupDeploymentWithStatus(
+  octokit: Octokit,
+  environment: string,
+  { owner, repo, ref = 'main' }: Action,
+): Promise<void> {
+  await octokit.request('POST /repos/{owner}/{repo}/deployments', {
+    owner,
+    repo,
+    ref,
+    environment,
+    required_contexts: [],
+  });
+  const { data } = await octokit.request(
+    'GET /repos/{owner}/{repo}/deployments',
+    {
+      owner,
+      repo,
+      environment,
+    },
+  );
+  const [deployment] = data;
+  const { id } = deployment;
+  await octokit.request(
+    'POST /repos/{owner}/{repo}/deployments/{deployment_id}/statuses',
+    {
+      owner: owner,
+      repo: repo,
+      state: 'success',
+      deployment_id: id,
+    },
+  );
+}
+
+async function getAllDeployments(
+  octokit: Octokit,
+  environment: string,
+  { owner, repo }: Action,
+): Promise<{ deploymentId: number; ref: string }[]> {
+  const { data } = await octokit.request(
+    'GET /repos/{owner}/{repo}/deployments',
+    {
+      owner,
+      repo,
+      environment,
+    },
+  );
+  const deploymentRefs: { deploymentId: number; ref: string }[] = data.map((deployment) => ({
+    deploymentId: deployment.id,
+    ref: deployment.ref,
+  }));
+  return deploymentRefs;
+}
