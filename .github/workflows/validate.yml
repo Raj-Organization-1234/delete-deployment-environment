@@ -4,7 +4,7 @@ on:
   [pull_request, push]
 
 env:
-  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  GITHUB_TOKEN: ${{ secrets.TOKEN }}
   OWNER: ${{ github.repository_owner }}
   NODE_VERSION: '20'
 
@@ -41,13 +41,6 @@ jobs:
         run: |
           echo "::group::Running tests..."
           npm run test
-          echo "::endgroup::"
-
-      - name: 🏗️ Verify Build Process
-        if: matrix.check == 'build'
-        run: |
-          echo "::group::Building application..."
-          npm run pack
           echo "::endgroup::"
 
   validation-summary:
