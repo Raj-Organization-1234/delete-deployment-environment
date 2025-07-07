@@ -15,11 +15,7 @@ jobs:
     permissions:
       contents: read
       actions: read
-      
-    strategy:
-      matrix:
-        check: [ test, build]
-        
+
     steps:
       - name: 📥 Checkout Repository
         uses: actions/checkout@v4
@@ -37,14 +33,12 @@ jobs:
           npm ci
   
       - name: 🧪 Execute Test Suite
-        if: matrix.check == 'test'
         run: |
           echo "::group::Running tests..."
           npm run test
           echo "::endgroup::"
 
       - name: 🏗️ Verify Build Process
-        if: matrix.check == 'build'
         run: |
           echo "::group::Building application..."
           npm run pack
