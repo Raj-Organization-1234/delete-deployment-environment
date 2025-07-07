@@ -1,0 +1,15 @@
+{
+  "compilerOptions": {
+    "esModuleInterop": true,
+    "module": "commonjs",
+    "strict": true,
+    "declaration": false,
+    "target": "es6",
+    "sourceMap": true,
+    "lib": ["es6", "dom"],
+    "outDir": "lib",
+    "rootDir": ".",
+    "moduleResolution": "node",
+  },
+  "exclude": ["node_modules"],
+}

@@ -1,0 +1,32 @@
+name: 'Delete Deployment Environment'
+description: 'GitHub Action to deactivate and optionally delete deployments and GitHub environments.'
+author: 'step-security'
+
+branding:
+  icon: briefcase
+  color: gray-dark
+
+inputs:
+  token:
+    description: GitHub access token with permissions to manage deployments and environments
+    required: true
+
+  environment:
+    description: Name of the environment to target (e.g. "production", "pr-123")
+    required: true
+
+  ref:
+    description: (Optional) Specific deployment ref to target (e.g. feature branch name)
+    required: false
+
+  onlyRemoveDeployments:
+    description: 'Set to true to only remove deployments, leaving the environment intact. Defaults to false.'
+    required: false
+
+  onlyDeactivateDeployments:
+    description: 'Set to true to deactivate deployments only, without removing deployments or the environment. Defaults to false.'
+    required: false
+
+runs:
+  using: node20
+  main: 'dist/index.js'
