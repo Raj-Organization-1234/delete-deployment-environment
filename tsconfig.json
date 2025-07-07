@@ -8,8 +8,8 @@
     "sourceMap": true,
     "lib": ["es6", "dom"],
     "outDir": "lib",
-    "rootDir": "src",
+    "rootDir": ".",
     "moduleResolution": "node",
   },
-  "exclude": ["node_modules", "__tests__/*.test.ts"],
+  "exclude": ["node_modules"],
 }
