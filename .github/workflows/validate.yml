@@ -33,6 +33,8 @@ jobs:
           npm ci
   
       - name: 🧪 Execute Test Suite
+        env:
+          INPUT_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           echo "::group::Running tests..."
           npm run test
