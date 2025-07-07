@@ -1,3 +1,3 @@
-import { main } from './execute';
+import { run } from './execute';
 
-main();
+run();
